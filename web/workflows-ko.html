@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Laya 워크플로우·온톨로지 (한국어)</title>
+<link rel="stylesheet" href="./workflows-ko.css" />
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>워크플로우 · 온톨로지</h1>
+    <p class="muted">Laya 결정 모델에 던지는 질문 집합(온톨로지)을 보고, 직접 고쳐서 다시 실행할 수 있습니다. 입력 데이터는 브라우저 밖으로 나가지 않습니다.</p>
+  </header>
+
+  <nav class="nav">
+    <a href="./index.html">← 데모로 돌아가기</a>
+    <span class="sep">·</span>
+    <a href="./workflows.html">English version</a>
+  </nav>
+
+  <section class="card">
+    <h2>0 · 모델</h2>
+    <div class="row">
+      <label class="muted" for="variant">빌드</label>
+      <select id="variant"><option>불러오는 중…</option></select>
+      <label class="muted" for="backend">백엔드</label>
+      <select id="backend">
+        <option value="wasm">WASM (단일 스레드)</option>
+        <option value="webgpu">WebGPU (실험적)</option>
+      </select>
+      <button id="loadBtn" class="btn primary">모델 로드</button>
+    </div>
+    <div id="status" class="muted" style="margin-top:10px">모델을 아직 로드하지 않았습니다.</div>
+  </section>
+
+  <section class="card">
+    <h2>1 · 워크플로우 선택</h2>
+    <div class="row">
+      <select id="workflow"></select>
+    </div>
+    <p id="wfDesc" class="muted" style="margin:10px 0 0"></p>
+  </section>
+
+  <section class="card">
+    <h2>2 · 입력</h2>
+    <div class="row" id="subjectRow">
+      <label class="muted" for="subject">제목</label>
+      <input type="text" id="subject" placeholder="(선택) 제목" style="flex:1" />
+    </div>
+    <textarea id="message" placeholder="여기에 상황/메시지를 붙여넣으세요"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button id="runBtn" class="btn primary">질문 실행</button>
+      <label class="muted" for="threshold">자동 처리 임계값</label>
+      <input type="range" id="threshold" min="0.5" max="0.99" step="0.01" value="0.8" style="max-width:180px" />
+      <span id="thresholdVal" class="mono">0.80</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>3 · 결과</h2>
+    <div id="result" class="muted">아직 실행하지 않았습니다.</div>
+  </section>
+
+  <section class="card">
+    <h2>4 · 온톨로지 (질문 정의) <span id="ontoCount" class="muted"></span></h2>
+    <div class="row" style="margin-bottom:10px">
+      <button id="copyOntoBtn" class="btn small">온톨로지 JSON 복사</button>
+    </div>
+    <div id="ontology"></div>
+  </section>
+
+  <section class="card">
+    <h2>5 · 온톨로지 편집</h2>
+    <div class="row" style="margin-bottom:10px">
+      <button id="editBtn" class="btn small">현재 워크플로우 편집</button>
+      <button id="saveBtn" class="btn small primary">적용</button>
+      <button id="exportBtn" class="btn small">내보내기(JSON)</button>
+      <button id="resetBtn" class="btn small">기본값으로</button>
+    </div>
+    <div id="editorBox" style="display:none">
+      <p class="muted" style="margin:0 0 8px">질문 id·타입·선택지를 고치면 그대로 실행에 반영됩니다. 변경은 이 브라우저(localStorage)에만 저장됩니다.</p>
+      <textarea id="editorJson" spellcheck="false"></textarea>
+      <div id="editorMsg" class="muted" style="margin-top:8px"></div>
+    </div>
+  </section>
+
+  <footer class="muted">
+    <a href="./NOTICE.txt">NOTICE</a> · <a href="./LICENSE.txt">LICENSE</a> · 모델: convaiinnovations/laya-multilingual (mmBERT, 100+ 언어) · 추론: ONNX Runtime Web
+  </footer>
+</div>
+<script type="module" src="./workflows-ko.js?v=20261104"></script>
+</body>
+</html>
