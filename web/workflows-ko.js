@@ -516,17 +516,19 @@ function renderAnswers(spec, answers, elapsed, tokens) {
     wrap.appendChild(head);
 
     if (a.type === "choice") {
-      const sorted = Object.entries(a.probs).sort((x, y) => y[1] - x[1]);
+      const sorted = Object.entries(a.probabilities).sort((x, y) => y[1] - x[1]);
       for (const [k, p] of sorted) wrap.appendChild(barRow("choice", k, p, k === a.choice));
     } else if (a.type === "score") {
-      const max = Math.max(...Object.values(a.probs));
-      for (const [k, p] of Object.entries(a.probs)) {
-        wrap.appendChild(barRow("score", `${k} · ${(q?.criteria ?? [])[Number(k)] ?? ""}`, p, p === max));
+      const probs = Object.entries(a.probabilities);
+      const max = Math.max(...probs.map(([, p]) => p));
+      for (const [k, p] of probs) {
+        const label = a.legend?.[k] ?? (q?.criteria ?? [])[Number(k)] ?? "";
+        wrap.appendChild(barRow("score", `${k} · ${label}`, p, p === max));
       }
       wrap.appendChild(barRow("score", "점수", 1, true, a.score.toFixed(2)));
     } else {
-      wrap.appendChild(barRow("noul", "참", a.probYes, a.probYes >= 0.5));
-      wrap.appendChild(barRow("noul", "거짓", 1 - a.probYes, a.probYes < 0.5));
+      wrap.appendChild(barRow("noul", "참", a.noul, a.noul >= 0.5));
+      wrap.appendChild(barRow("noul", "거짓", 1 - a.noul, a.noul < 0.5));
     }
     box.appendChild(wrap);
   }

@@ -118,6 +118,8 @@ def main():
         wp = b.new_page()
         wlogs = []
         wp.on("pageerror", lambda e: wlogs.append(str(e)[:300]))
+        wcons = []
+        wp.on("console", lambda m: wcons.append(f"[{m.type}] {m.text[:300]}"))
         wp.goto(f"http://127.0.0.1:{port}/workflows-ko.html")
         for _ in range(30):
             time.sleep(1)
@@ -150,7 +152,13 @@ def main():
         assert "준비 완료" in wst, wst
 
         wp.click("#runBtn")
-        wp.wait_for_function("document.getElementById('outcome').innerText.trim().length > 20", timeout=180000)
+        try:
+            wp.wait_for_function("document.getElementById('outcome').innerText.trim().length > 20", timeout=180000)
+        except Exception:
+            print("workflow run failed — status:", wp.inner_text("#status"))
+            print("page errors:", wlogs)
+            print("console:", wcons[-10:])
+            raise
         outcome = wp.inner_text("#outcome").replace("\n", " ")[:160]
         chips = wp.eval_on_selector_all("#outcome .chip", "els => els.map(e => e.textContent)")
         print("outcome:", outcome, "| chips:", chips)
