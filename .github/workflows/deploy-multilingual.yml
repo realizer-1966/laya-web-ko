@@ -1,0 +1,146 @@
+name: Build multilingual model and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      variants:
+        description: "Model builds to publish (comma separated: qdq8, q8e8, q4e8)"
+        default: "q8e8"
+      deploy_pages:
+        description: "Deploy the site to GitHub Pages"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  VARIANTS: ${{ inputs.variants || 'q8e8' }}
+  HF_MODEL_REPO: ${{ vars.HF_MODEL_REPO_MULTILINGUAL }}
+  CHECKPOINT: convaiinnovations/laya-multilingual
+  OUT: build-multilingual
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-build.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cache key for the variant list
+        run: echo "VARIANTS_KEY=${VARIANTS//,/-}" >> "$GITHUB_ENV"
+
+      # The converted model is rebuilt only when the conversion code, its pinned
+      # dependencies, the checkpoint or the variant list change.
+      - name: Restore converted model
+        id: model-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build-multilingual/model
+            build-multilingual/verify_report.json
+            build-multilingual/verify_report.md
+          key: laya-ml-${{ env.CHECKPOINT }}-${{ hashFiles('scripts/build_model.py', 'requirements-build.txt') }}-${{ env.VARIANTS_KEY }}
+
+      - name: Install Python dependencies
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        run: pip install -r requirements-build.txt
+
+      # mmBERT (the multilingual encoder) needs the current `laya` from git: the
+      # pinned wheel has a RoPE base-length bug with transformers 5.x.
+      - name: Use laya from git main
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        run: pip install -U "laya @ git+https://github.com/NandhaKishorM/laya.git"
+
+      - name: Convert and quantize the multilingual model
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        run: |
+          python scripts/build_model.py \
+            --repo "$CHECKPOINT" \
+            --out "$OUT" \
+            --variants "$VARIANTS"
+
+      - name: Check the converted model against PyTorch
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        run: python scripts/verify_model.py --out "$OUT"
+
+      # The English token-parity fixture does not apply to a multilingual tokenizer;
+      # reported but not fatal.
+      - name: JS/Python token sequence parity (informational)
+        continue-on-error: true
+        run: node tests/seq_parity.mjs
+
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Assemble a full local copy of the site for testing
+        run: node scripts/prepare_site.mjs --model-dir "$OUT/model" --out dist-test
+
+      - name: Browser smoke test (headless Chromium, WASM)
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+          SMOKE_DIST=dist-test python tests/browser_smoke_ml.py
+
+      # Downloadable ONNX build even without a Hugging Face token:
+      # Actions -> this run -> Artifacts -> laya-multilingual-q8e8
+      - name: Upload the converted model as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: laya-multilingual-${{ env.VARIANTS_KEY }}
+          path: ${{ env.OUT }}/model
+          retention-days: 30
+
+      - name: Upload the model to Hugging Face
+        if: env.HF_MODEL_REPO != ''
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install huggingface_hub
+          python scripts/upload_to_hf.py "$HF_MODEL_REPO" --folder "$OUT/model"
+
+      - name: Assemble the site to deploy
+        run: |
+          ARGS=(--model-dir "$OUT/model")
+          if [ -n "$HF_MODEL_REPO" ]; then
+            ARGS+=(--external-model-base-multilingual "https://huggingface.co/${HF_MODEL_REPO}/resolve/main/")
+          fi
+          node scripts/prepare_site.mjs "${ARGS[@]}"
+
+      - uses: actions/configure-pages@v5
+        if: ${{ github.event_name == 'push' || inputs.deploy_pages }}
+
+      - uses: actions/upload-pages-artifact@v3
+        if: ${{ github.event_name == 'push' || inputs.deploy_pages }}
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    if: ${{ github.event_name == 'push' || inputs.deploy_pages }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

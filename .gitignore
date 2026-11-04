@@ -1,0 +1,13 @@
+node_modules/
+build/
+build-multilingual/
+dist/
+dist-test/
+.cache/
+__pycache__/
+*.pyc
+*.onnx
+*.onnx.data
+*.onnx.data.part*
+.venv/
+venv/
