@@ -83,21 +83,23 @@ def main():
         pg.click("#runBtn")
         pg.wait_for_function("window.__laya && window.__laya.ready && document.querySelector('#resultCard').style.display !== 'none'",
                              timeout=180000)
-        summary = pg.evaluate("""() => {
-            const cards = [...document.querySelectorAll('#answers .answer')];
-            return cards.map(c => c.innerText.slice(0, 120));
-        }""")
+        summary = pg.evaluate("""() => [...document.querySelectorAll('#answers .q')]
+            .map(c => c.innerText.replace(/\\s+/g, ' ').slice(0, 140))""")
         print("answers:", json.dumps(summary, ensure_ascii=False))
         assert summary, "no answers rendered"
 
         raw = json.loads(pg.inner_text("#raw"))
         for qid, a in raw["answers"].items():
+            if a["type"] in ("choice", "score"):
+                total = sum(a["probabilities"].values())
+                assert abs(total - 1) < 0.02, (qid, total)
+                assert 0 <= a["confidence"] <= 1, (qid, a["confidence"])
             if a["type"] == "choice":
-                assert abs(sum(a["choice"].values()) - 1) < 0.02, (qid, a)
-            elif a["type"] == "noul":
-                assert 0 <= a["noul"] <= 1, (qid, a)
+                assert a["choice"] in a["probabilities"], (qid, a["choice"])
+            elif a["type"] == "score":
+                assert 0 <= a["score"] <= len(a["legend"]) - 1, (qid, a["score"], len(a["legend"]))
             else:
-                assert 0 <= a["score"] <= len(a["levels"]) - 1, (qid, a)
+                assert 0 <= a["noul"] <= 1, (qid, a["noul"])
         print("raw answers valid:", list(raw["answers"]))
 
         errs = [l for l in logs if l.startswith("[pageerror]")]

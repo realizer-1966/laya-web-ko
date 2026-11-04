@@ -83,12 +83,6 @@ jobs:
         if: steps.model-cache.outputs.cache-hit != 'true'
         run: python scripts/verify_model.py --out "$OUT"
 
-      # The English token-parity fixture does not apply to a multilingual tokenizer;
-      # reported but not fatal.
-      - name: JS/Python token sequence parity (informational)
-        continue-on-error: true
-        run: node tests/seq_parity.mjs
-
       - name: Install web dependencies
         run: npm ci
 
