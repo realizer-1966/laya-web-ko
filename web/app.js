@@ -367,7 +367,7 @@ function applyBase(key) {
   const vsel = $("variant"); vsel.innerHTML = "";
   for (const [k, v] of Object.entries(MANIFEST.variants)) vsel.add(new Option(`${v.label} (약 ${Math.round(v.data.size / 1048576)} MB)`, k));
   laya = null; $("runBtn").disabled = true; $("verifyBtn").disabled = true; $("loadBtn").disabled = false; $("badges").innerHTML = "";
-  setStatus(`${BASES[key].label} 선택됨. 아직 로드하지 않았습니다.`);
+  setStatus(`${BASES[key].label} 선택됨. 아직 로드하지 않았습니다. 로드 시 이 사이트에서 모델 파일을 내려받습니다(수백 MB, 방문당 1회).`);
 }
 
 async function initManifests() {
@@ -377,7 +377,7 @@ async function initManifests() {
   // 다국어 빌드가 있으면 기본 선택, 없으면 첫 번째 사용 가능 모델
   const prefer = ["multilingual", "laya", "typed"].find((k) => AVAILABLE[k]);
   if (prefer) {
-    $("baseModelRow").style.display = Object.keys(AVAILABLE).length > 1 ? "" : "none";
+    $("baseModelRow").style.display = ""; // 영문 데모와 같은 구성: 베이스 모델 선택 줄을 항상 보여 줍니다
     applyBase(prefer);
   } else {
     // 모델이 없으면: 빌드 드롭다운을 시뮬레이션 상태로 갱신하고 mock 폴백 UI 노출
