@@ -88,7 +88,7 @@ def main():
         print("answers:", json.dumps(summary, ensure_ascii=False))
         assert summary, "no answers rendered"
 
-        raw = json.loads(pg.inner_text("#raw"))
+        raw = json.loads(pg.evaluate("document.getElementById('raw').textContent"))
         for qid, a in raw["answers"].items():
             if a["type"] in ("choice", "score"):
                 total = sum(a["probabilities"].values())
