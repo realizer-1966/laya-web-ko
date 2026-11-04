@@ -347,29 +347,85 @@ function setReady() {
   runBtn.disabled = false;
 }
 
+async function fetchBytes(url, onProgress) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  const total = Number(res.headers.get("content-length")) || 0;
+  const reader = res.body.getReader();
+  const chunks = []; let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value); got += value.length; onProgress?.(got, total);
+  }
+  const out = new Uint8Array(got); let o = 0;
+  for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out;
+}
+
+async function fetchParts(dir, entry, onProgress) {
+  let cache = null;
+  try { cache = await caches.open("laya-" + entry.sha256.slice(0, 16)); } catch { /* 사생활 보호 모드 */ }
+  const out = new Uint8Array(entry.size); let off = 0;
+  for (const part of entry.parts) {
+    const url = dir + part;
+    let bytes = null;
+    try { const hit = cache && await cache.match(url); if (hit) bytes = new Uint8Array(await hit.arrayBuffer()); } catch {}
+    if (!bytes) {
+      bytes = await fetchBytes(url, (got) => onProgress?.(off + got, entry.size));
+      try { if (cache) await cache.put(url, new Response(bytes)); } catch {}
+    }
+    if (off + bytes.length > entry.size) throw new Error("가중치가 manifest 크기보다 큽니다");
+    out.set(bytes, off); off += bytes.length; onProgress?.(off, entry.size);
+  }
+  if (off !== entry.size) throw new Error(`가중치 불완전: ${off} / ${entry.size} 바이트`);
+  return out;
+}
+
 async function loadModel() {
   const opt = variantSel.selectedOptions[0];
   if (!opt || !manifests[opt.dataset.base]) return;
   const man = manifests[opt.dataset.base];
-  const variant = man.variants[opt.value];
+  const v = man.variants[opt.value];
+  const dir = man.base;
   setLoading();
   setProgress(0);
   loadBtn.textContent = "다운로드 중…";
   try {
-    const { Laya, ortBackend } = await import("./laya-core.js");
-    engine = new Laya({
-      manifest: man,
-      variant,
-      onProgress: (f) => setProgress(f),
-      onStatus: (s) => setStatus(s, true),
+    // index.html 과 동일한 실제 추론 경로(runtime.js → laya-core.js)
+    const { ort, Tokenizer, Laya } = await import("./runtime.js");
+    ort.env.wasm.wasmPaths = new URL("./vendor/", import.meta.url).href;
+    ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 2) : 1;
+
+    setStatus("토크나이저와 설정을 불러오는 중…", true);
+    const [tj, tc, cfg] = await Promise.all(
+      ["tokenizer.json", "tokenizer_config.json", "rl_agent_config.json"].map((f) =>
+        fetch(dir + f).then((r) => { if (!r.ok) throw new Error(f + ": HTTP " + r.status); return r.json(); })));
+    const tokenizer = new Tokenizer(tj, tc);
+    tokenizer.config = tc; // 특수토큰(<bos>/<eos>/<mask>/<pad>)을 토크나이저 설정에서 읽습니다
+
+    const graph = await fetchBytes(dir + v.onnx);
+    const data = await fetchParts(dir, v.data, (got, total) => {
+      setProgress(total ? got / total : null);
+      setStatus(`가중치 다운로드 중: ${(got / 1048576).toFixed(0)} / ${(total / 1048576).toFixed(0)} MB`, true);
     });
-    await engine.load();
-    loadedLabel = `${opt.dataset.base}/${opt.value}`;
-    setStatus("모델 준비 완료. 메시지를 넣고 실행하세요.", false);
+
+    setStatus("추론 세션 생성 중 (첫 실행은 시간이 걸릴 수 있습니다)…", true);
     setProgress(null);
-    badges([{ id: "load", text: "모델 로드됨" }, { id: "backend", text: `backend: ${ortBackend?.() ?? "wasm"}` }]);
+    const session = await ort.InferenceSession.create(graph, {
+      executionProviders: ["wasm"],
+      graphOptimizationLevel: "all",
+      externalData: [{ path: v.data.name, data }],
+    });
+    engine = new Laya(ort, session, tokenizer, cfg);
+    loadedLabel = `${opt.dataset.base}/${opt.value}`;
+    setProgress(null);
+    setStatus("모델 준비 완료. 메시지를 넣고 실행하세요.", false);
+    badges([{ id: "load", text: "모델 로드됨" }, { id: "backend", text: `backend: wasm${ort.env.wasm.numThreads > 1 ? ` · ${ort.env.wasm.numThreads} 스레드` : ""}` }]);
     setReady();
   } catch (e) {
+    console.error(e);
+    engine = null; loadedLabel = "";
     setStatus(`모델 로드 실패: ${e.message}`, false);
     setProgress(null);
     badges([{ id: "err", text: "모델 없음" }]);
@@ -502,10 +558,11 @@ async function run() {
   $("raw").textContent = "";
   const t0 = performance.now();
   try {
-    const out = await engine.run(spec, state);
+    const res = await engine.systemOne(state, spec.questions);
     const elapsed = performance.now() - t0;
-    renderAnswers(spec, out.answers, elapsed, out.promptTokens ?? 0);
-    setStatus(`추론 완료 · ${Math.round(elapsed)} ms · ${out.promptTokens ?? 0} 토큰`, false);
+    const tokens = res.usage?.input_tokens ?? 0;
+    renderAnswers(spec, res.answers, elapsed, tokens);
+    setStatus(`추론 완료 · ${Math.round(elapsed)} ms · ${tokens} 토큰`, false);
   } catch (e) {
     console.error(e);
     setStatus(`실행 실패: ${e.message}`, true);
