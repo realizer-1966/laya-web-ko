@@ -3,6 +3,11 @@
 
     python scripts/gen_fixtures.py         # needs build/en (run scripts/build_model.py first)
 
+Options:
+  --checkpoint DIR        PyTorch checkpoint to read (default: build/en); use e.g. build-multilingual/en
+  --reference-out FILE    where to write the six reference cases (default: web/reference.json)
+  --skip-sequences        do not write tests/seq_tests.json (that file is tied to the English tokenizer)
+
 Writes:
   web/reference.json      what the fp32 PyTorch model answers for six cases (the page's "compare" button uses it)
   tests/seq_tests.json    token sequences the JavaScript port must reproduce exactly
@@ -13,7 +18,14 @@ import laya
 from laya.common import build_sequence
 
 ROOT = Path(__file__).resolve().parent.parent
-agent = laya.load(str(ROOT / "build" / "en"), device="cpu")
+ARGS = sys.argv[1:]
+def opt(name, default):
+    return ARGS[ARGS.index(name) + 1] if name in ARGS else default
+
+CHECKPOINT = Path(opt("--checkpoint", str(ROOT / "build" / "en")))
+REFERENCE_OUT = Path(opt("--reference-out", str(ROOT / "web" / "reference.json")))
+SKIP_SEQUENCES = "--skip-sequences" in ARGS
+agent = laya.load(str(CHECKPOINT), device="cpu")
 
 CASES = [
     {"name": "support ticket", "state": {"ticket": {"subject": "App crashes on launch", "text": "Since the last update, the app closes as soon as I open it. I have a demo in one hour!"}},
@@ -44,7 +56,11 @@ ref = []
 for c in CASES:
     r = agent.system_one(c["state"], c["questions"])
     ref.append({"name": c["name"], "state": c["state"], "questions": c["questions"], "answers": r["answers"], "input_tokens": r["usage"]["input_tokens"]})
-(ROOT / "web" / "reference.json").write_text(json.dumps(ref, indent=1))
+REFERENCE_OUT.write_text(json.dumps(ref, indent=1))
+
+if SKIP_SEQUENCES:
+    print(f"wrote {len(ref)} reference cases to {REFERENCE_OUT} (skipped sequence tests)")
+    sys.exit(0)
 
 tests = []
 def add(state, qd):

@@ -57,9 +57,10 @@ jobs:
         with:
           path: |
             build-multilingual/model
+            build-multilingual/reference.json
             build-multilingual/verify_report.json
             build-multilingual/verify_report.md
-          key: laya-ml-${{ env.CHECKPOINT }}-${{ hashFiles('scripts/build_model.py', 'requirements-build.txt') }}-${{ env.VARIANTS_KEY }}
+          key: laya-ml-${{ env.CHECKPOINT }}-${{ hashFiles('scripts/build_model.py', 'scripts/gen_fixtures.py', 'requirements-build.txt') }}-${{ env.VARIANTS_KEY }}
 
       - name: Install Python dependencies
         if: steps.model-cache.outputs.cache-hit != 'true'
@@ -79,6 +80,16 @@ jobs:
             --out "$OUT" \
             --variants "$VARIANTS"
 
+      # The page's "compare" card needs reference answers from this checkpoint's
+      # own fp32 PyTorch model, not the English ones committed in web/.
+      - name: Build browser reference answers for this checkpoint
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        run: |
+          python scripts/gen_fixtures.py \
+            --checkpoint "$OUT/en" \
+            --reference-out "$OUT/reference.json" \
+            --skip-sequences
+
       - name: Check the converted model against PyTorch
         if: steps.model-cache.outputs.cache-hit != 'true'
         run: python scripts/verify_model.py --out "$OUT"
@@ -87,7 +98,9 @@ jobs:
         run: npm ci
 
       - name: Assemble a full local copy of the site for testing
-        run: node scripts/prepare_site.mjs --model-dir "$OUT/model" --out dist-test
+        run: |
+          if [ -f "$OUT/reference.json" ]; then cp "$OUT/reference.json" web/reference.json; fi
+          node scripts/prepare_site.mjs --model-dir "$OUT/model" --out dist-test
 
       - name: Browser smoke test (headless Chromium, WASM)
         run: |
@@ -114,6 +127,7 @@ jobs:
 
       - name: Assemble the site to deploy
         run: |
+          if [ -f "$OUT/reference.json" ]; then cp "$OUT/reference.json" web/reference.json; fi
           ARGS=(--model-dir "$OUT/model")
           if [ -n "$HF_MODEL_REPO" ]; then
             ARGS+=(--external-model-base-multilingual "https://huggingface.co/${HF_MODEL_REPO}/resolve/main/")

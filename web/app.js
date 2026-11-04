@@ -196,7 +196,7 @@ async function fetchParts(entry, onProgress) {
 }
 
 async function loadModel() {
-  $("loadBtn").disabled = true; $("runBtn").disabled = true;
+  $("loadBtn").disabled = true; $("runBtn").disabled = true; $("verifyBtn").disabled = true;
   $("badges").innerHTML = "";
   try {
     if (MOCK || MOCK_FORCED) {
@@ -251,7 +251,7 @@ async function loadModel() {
     badge($("variant").selectedOptions[0]?.textContent.split(" (")[0] ?? $("variant").value);
     if (backendNote) badge(backendNote);
     badge("교차 출처 격리: " + (self.crossOriginIsolated ? "예" : "아니오"));
-    $("runBtn").disabled = false;
+    $("runBtn").disabled = false; $("verifyBtn").disabled = false;
   } catch (e) {
     console.error(e); setStatus("모델을 로드할 수 없습니다: " + (e?.message || e), "warn");
   } finally { setProgress(null); $("loadBtn").disabled = false; }
@@ -317,6 +317,32 @@ async function run() {
   finally { $("runBtn").disabled = false; }
 }
 
+// --------------------------------------------------------------------------- PyTorch 대조
+async function verify() {
+  if (!laya) return;
+  $("verifyBtn").disabled = true; $("verifyOut").textContent = "실행 중…";
+  try {
+    const ref = await fetch("./reference.json").then((r) => r.json());
+    let rows = "", worst = 0, agree = 0, total = 0;
+    for (const c of ref) {
+      const res = await laya.systemOne(c.state, c.questions);
+      for (const [qid, a] of Object.entries(res.answers)) {
+        const r = c.answers[qid];
+        let dp, headRef, headNow, same;
+        if (a.type === "noul") { dp = Math.abs(a.noul - r.noul); headRef = r.noul.toFixed(3); headNow = a.noul.toFixed(3); same = (a.noul >= 0.5) === (r.noul >= 0.5); }
+        else { const ks = Object.keys(a.probabilities); dp = Math.max(...ks.map((k) => Math.abs(a.probabilities[k] - r.probabilities[k])));
+          const top = (o) => Object.entries(o.probabilities).sort((x, y) => y[1] - x[1])[0][0];
+          headRef = a.type === "choice" ? top(r) : r.score.toFixed(2); headNow = a.type === "choice" ? top(a) : a.score.toFixed(2); same = top(a) === top(r); }
+        worst = Math.max(worst, dp); total++; agree += same ? 1 : 0;
+        rows += `<tr><td>${c.name}</td><td>${qid}</td><td>${headRef}</td><td>${headNow}</td><td class="num">${dp.toFixed(3)}</td><td>${same ? "같음" : "<b class='warn'>다름</b>"}</td></tr>`;
+      }
+    }
+    $("verifyOut").innerHTML = `<p><b>${agree}/${total}</b>개 질문이 원본과 같은 최상위 답을 골랐습니다. 확률 차이의 최댓값은 <b>${worst.toFixed(3)}</b>입니다.</p><table><thead><tr><th>케이스</th><th>질문</th><th>원본</th><th>이 빌드</th><th>최대 |Δp|</th><th>최상위 답</th></tr></thead><tbody>${rows}</tbody></table>`;
+    window.__verify = { agree, total, worst };
+  } catch (e) { $("verifyOut").textContent = "대조 실패: " + (e?.message || e); }
+  finally { $("verifyBtn").disabled = false; }
+}
+
 // --------------------------------------------------------------------------- 초기화
 async function resolveBaseDir(key) {
   const b = BASES[key];
@@ -340,7 +366,7 @@ function applyBase(key) {
   MODEL_DIR = a.dir; MANIFEST = a.manifest;
   const vsel = $("variant"); vsel.innerHTML = "";
   for (const [k, v] of Object.entries(MANIFEST.variants)) vsel.add(new Option(`${v.label} (약 ${Math.round(v.data.size / 1048576)} MB)`, k));
-  laya = null; $("runBtn").disabled = true; $("loadBtn").disabled = false; $("badges").innerHTML = "";
+  laya = null; $("runBtn").disabled = true; $("verifyBtn").disabled = true; $("loadBtn").disabled = false; $("badges").innerHTML = "";
   setStatus(`${BASES[key].label} 선택됨. 아직 로드하지 않았습니다.`);
 }
 
@@ -378,7 +404,8 @@ function applyPreset() {
 $("preset").addEventListener("change", applyPreset); applyPreset();
 $("thresh").addEventListener("input", () => { $("threshVal").textContent = Number($("thresh").value).toFixed(2); if (lastResult) render(lastResult); });
 $("runBtn").addEventListener("click", run);
+$("verifyBtn").addEventListener("click", verify);
 $("baseModel").addEventListener("change", () => applyBase($("baseModel").value));
 document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") run(); });
-window.__laya = { loadModel, run, get ready() { return !!laya; }, get instance() { return laya; } };
+window.__laya = { loadModel, run, verify, get ready() { return !!laya; }, get instance() { return laya; } };
 initManifests();

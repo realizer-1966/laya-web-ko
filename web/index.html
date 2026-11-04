@@ -20,6 +20,8 @@
   main{max-width:980px;margin:0 auto;padding:28px 16px 64px}
   h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em}
   .sub{color:var(--ink2);margin:0 0 20px}
+  .backlink{font-size:13px;margin:-8px 0 20px}
+  .backlink a{color:var(--accent)}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
   h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink2);margin:0 0 10px;font-weight:600}
   label{display:block;font-size:13px;color:var(--ink2);margin:0 0 4px}
@@ -53,15 +55,23 @@
   .decision{margin-top:8px;font-size:13px;padding:6px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--line)}
   .decision b.auto{color:var(--good)} .decision b.human{color:var(--warn)}
   pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;font-size:12px;max-height:280px}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--ink2);font-weight:600}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .stats{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px}
+  .stat b{font-size:20px;display:block;font-variant-numeric:tabular-nums}
+  .stat span{font-size:12px;color:var(--ink2)}
+  details summary{cursor:pointer;color:var(--accent);font-size:13px;margin-top:8px}
   .note{font-size:13px;color:var(--ink2)}
   .warn{color:var(--warn)}
 </style>
 </head>
 <body>
 <main>
-  <p class="nav"><a href="./workflows-ko.html">워크플로우 · 온톨로지 데모 →</a></p>
-    <h1>Laya 브라우저 데모 — 한국어</h1>
+  <h1>Laya 브라우저 데모 — 한국어</h1>
   <p class="sub">다국어 Laya 결정 모델(mmBERT-base, 322M, 100개 이상 언어)을 ONNX Runtime Web으로 이 페이지 안에서만 실행합니다. 입력한 내용은 절대 페이지 밖으로 나가지 않습니다.</p>
+  <p class="backlink"><a href="./workflows-ko.html">워크플로우 · 온톨로지 데모 &rarr;</a></p>
 
   <section class="card" id="loadCard">
     <h2>1 · 모델 로드</h2>
@@ -98,6 +108,7 @@
       <div>
         <label for="preset">예제</label>
         <select id="preset"></select>
+        <div class="note" style="margin-top:4px"><a href="https://github.com/vishalmysore/layaForWeb/tree/main/tests/data" target="_blank" rel="noopener">테스트 데이터 더 보기</a> (라벨링된 케이스 108개)</div>
       </div>
       <div>
         <label for="thresh">신뢰도 ≥ <span id="threshVal">0.90</span>일 때 자동 처리</label>
@@ -129,8 +140,15 @@
     <details><summary>원시 JSON</summary><pre id="raw"></pre></details>
   </section>
 
-  <p class="note">원본: ConvAI Innovations의 Laya (Apache-2.0). 다국어 체크포인트 convaiinnovations/laya-multilingual을 브라우저용으로 변환한 비공식 포트입니다. 자동화에 쓰기 전에 자체 데이터로 신뢰도를 검증하세요. <a href="https://github.com/vishalmysore/layaForWeb">원본 저장소</a></p>
+  <section class="card">
+    <h2>3 · 원본 PyTorch 모델과 대조</h2>
+    <p class="note">저장된 테스트 케이스 6개를 이 브라우저에서 실행해, 같은 입력에 대해 원본 fp32 PyTorch 모델이 낸 확률과 비교합니다. 양자화 때문에 숫자는 조금씩 달라지므로, 신뢰도 값을 믿기 전에 차이가 얼마나 되는지 확인하는 용도입니다.</p>
+    <button class="secondary" id="verifyBtn" disabled>대조 실행</button>
+    <div id="verifyOut" style="margin-top:12px"></div>
+  </section>
+
+  <p class="note">ConvAI Innovations의 Laya(Apache-2.0)를 ONNX로 변환·양자화해 브라우저에서 실행합니다. 비공식 프로젝트이며 ConvAI Innovations와 무관합니다. 스스로 판단해 행동하게 만들기 전에 자체 데이터로 시험하고 신뢰도 값을 확인하세요. <a href="./NOTICE.txt">고지</a> &middot; <a href="./LICENSE.txt">라이선스</a></p>
 </main>
-<script type="module" src="./app.js?v=20261104"></script>
+<script type="module" src="./app.js?v=20261104d"></script>
 </body>
 </html>

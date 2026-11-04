@@ -102,6 +102,15 @@ def main():
                 assert 0 <= a["noul"] <= 1, (qid, a["noul"])
         print("raw answers valid:", list(raw["answers"]))
 
+        # --- 원본 PyTorch 대조 카드도 실제로 동작해야 한다 ---
+        assert pg.evaluate("!document.getElementById('verifyBtn').disabled"), "verify button still disabled after load"
+        pg.click("#verifyBtn")
+        pg.wait_for_function("window.__verify !== undefined", timeout=300000)
+        ver = pg.evaluate("window.__verify")
+        print("verify:", ver)
+        assert ver["total"] >= 6, ver
+        assert ver["agree"] >= ver["total"] * 0.7, ver
+
         errs = [l for l in logs if l.startswith("[pageerror]")]
         assert not errs, errs
 
